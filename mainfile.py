@@ -28,27 +28,22 @@ def load_laadpaal_data():
     gdf = gpd.GeoDataFrame(df, geometry=geometry, crs="EPSG:4326")
     return gdf
 
+# --- DATA CARS: direct laden, geen upload ---
+@st.cache_data
+def load_cars_data():
+    return pd.read_pickle('cars.pkl')
+
 laadpalen = load_laadpaal_data()
-
-# --- DATA CARS: Upload-widget, geen fout ---
-st.sidebar.header("🔍 Upload je voertuigdataset ('cars.pkl')")
-uploaded_file = st.sidebar.file_uploader("Kies het bestand", type="pkl")
-
-cars = None
-file_loaded = False
-if uploaded_file is not None:
-    cars = pd.read_pickle(uploaded_file)
-    file_loaded = True
+cars = load_cars_data()
 
 # --- SIDEBAR: Statistieken/Data ---
 st.sidebar.header("📊 Overzicht")
 st.sidebar.metric("🚗 Totaal laadpunten", int(laadpalen.shape[0]))
-if file_loaded:
-    st.sidebar.metric("📈 Totaal voertuigen", int(cars.shape[0]))
-    cars['datum_eerste_toelating_dt'] = pd.to_datetime(cars['datum_eerste_toelating'], format='%Y%m%d', errors='coerce')
-    max_date = cars['datum_eerste_toelating_dt'].max()
-    min_date = cars['datum_eerste_toelating_dt'].min()
-    st.sidebar.caption(f"Peildata: {min_date:%Y-%m} t/m {max_date:%Y-%m}")
+st.sidebar.metric("📈 Totaal voertuigen", int(cars.shape[0]))
+cars['datum_eerste_toelating_dt'] = pd.to_datetime(cars['datum_eerste_toelating'], format='%Y%m%d', errors='coerce')
+max_date = cars['datum_eerste_toelating_dt'].max()
+min_date = cars['datum_eerste_toelating_dt'].min()
+st.sidebar.caption(f"Peildata: {min_date:%Y-%m} t/m {max_date:%Y-%m}")
 
 # --- TABS: Layout ---
 tab1, tab2, tab3 = st.tabs(["📊 EV Trends", "🗺️ Laadpalen Map", "🏆 Top 10 Regio's"])
@@ -56,48 +51,44 @@ tab1, tab2, tab3 = st.tabs(["📊 EV Trends", "🗺️ Laadpalen Map", "🏆 Top
 # --- TAB 1: EV Trends & Brandstof ---
 with tab1:
     st.subheader("Cumulatief aantal auto's per brandstofsoort")
-    if file_loaded:
-        def bepaal_brandstof(naam):
-            naam = naam.lower()
-            if any(x in naam for x in ['ev', 'electric', 'id', 'e-tron', 'mach-e']):
-                return 'elektrisch'
-            elif any(x in naam for x in ['hybrid', 'phev', 'plugin']):
-                return 'hybride'
-            elif 'diesel' in naam:
-                return 'diesel'
-            elif 'waterstof' in naam:
-                return 'waterstof'
-            else:
-                return 'benzine'
+    def bepaal_brandstof(naam):
+        naam = naam.lower()
+        if any(x in naam for x in ['ev', 'electric', 'id', 'e-tron', 'mach-e']):
+            return 'elektrisch'
+        elif any(x in naam for x in ['hybrid', 'phev', 'plugin']):
+            return 'hybride'
+        elif 'diesel' in naam:
+            return 'diesel'
+        elif 'waterstof' in naam:
+            return 'waterstof'
+        else:
+            return 'benzine'
 
-        cars['brandstof'] = cars['handelsbenaming'].apply(bepaal_brandstof)
-        cars['datum_eerste_toelating_dt'] = pd.to_datetime(cars['datum_eerste_toelating'], format='%Y%m%d', errors='coerce')
-        groep = cars.groupby(
-            [cars['datum_eerste_toelating_dt'].dt.to_period('M'), 'brandstof']
-        ).size().unstack().fillna(0).cumsum()
-        groep.index = groep.index.astype(str)
-        fig1 = px.line(
-            groep.reset_index(),
-            x='datum_eerste_toelating_dt',
-            y=['elektrisch', 'benzine'],
-            labels={'value': 'Aantal voertuigen', 'datum_eerste_toelating_dt': 'Maand'},
-            color_discrete_map={'benzine': 'blue', 'elektrisch': 'red'},
-            title="Groeitrend: Elektrisch vs Benzine"
-        )
-        st.plotly_chart(fig1, use_container_width=True)
+    cars['brandstof'] = cars['handelsbenaming'].apply(bepaal_brandstof)
+    groep = cars.groupby(
+        [cars['datum_eerste_toelating_dt'].dt.to_period('M'), 'brandstof']
+    ).size().unstack().fillna(0).cumsum()
+    groep.index = groep.index.astype(str)
+    fig1 = px.line(
+        groep.reset_index(),
+        x='datum_eerste_toelating_dt',
+        y=['elektrisch', 'benzine'],
+        labels={'value': 'Aantal voertuigen', 'datum_eerste_toelating_dt': 'Maand'},
+        color_discrete_map={'benzine': 'blue', 'elektrisch': 'red'},
+        title="Groeitrend: Elektrisch vs Benzine"
+    )
+    st.plotly_chart(fig1, use_container_width=True)
 
-        st.subheader("Brandstof verdeling histogram")
-        histo = cars['brandstof'].value_counts()
-        fig2 = px.bar(
-            x=histo.index,
-            y=histo.values,
-            labels={'x': 'Brandstof', 'y': 'Aantal'},
-            color=histo.index,
-            color_discrete_map={'benzine': 'blue', 'elektrisch': 'red', 'hybride': 'orange'}
-        )
-        st.plotly_chart(fig2, use_container_width=True)
-    else:
-        st.info("Laad 'cars.pkl' via de sidebar voor voertuiganalyses.")
+    st.subheader("Brandstof verdeling histogram")
+    histo = cars['brandstof'].value_counts()
+    fig2 = px.bar(
+        x=histo.index,
+        y=histo.values,
+        labels={'x': 'Brandstof', 'y': 'Aantal'},
+        color=histo.index,
+        color_discrete_map={'benzine': 'blue', 'elektrisch': 'red', 'hybride': 'orange'}
+    )
+    st.plotly_chart(fig2, use_container_width=True)
 
 # --- TAB 2: Kaart van Laadpalen ---
 with tab2:
@@ -125,3 +116,7 @@ with tab3:
     laadpalen['is_snel'] = laadpalen['LevelID'] == 3  # Level 3 meestal snellader
     regio_snel = laadpalen.groupby('Gemeente')['is_snel'].mean().sort_values(ascending=False).head(10)
     st.table(regio_snel.reset_index().rename(columns={'is_snel': '% Snelladers'}))
+
+st.sidebar.write(
+    "Gebruik de tabs voor inzichten in EV-voertuigen en laadinfrastructuur. Powered by Streamlit & Plotly."
+)
