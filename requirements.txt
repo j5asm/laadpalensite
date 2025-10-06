@@ -1,0 +1,15 @@
+requests==2.32.3
+pandas==2.2.3
+numpy==2.1.3
+plotly==5.24.1
+matplotlib==3.10.0
+seaborn==0.13.2
+streamlit==1.45.1
+
+folium==0.14.0
+streamlit-folium==0.25.3
+
+geopandas
+shapely
+scikit-learn
+streamlit_option_menu
